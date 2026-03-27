@@ -1,0 +1,10 @@
+# K8s Namespace for Chromium Sandbox Pods
+#
+# 用法：kubectl apply -f sandbox/namespace.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox
+  labels:
+    purpose: chromium-sandbox
