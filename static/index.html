@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Computer Use Agent</title>
+    <title>Browser Use Agent</title>
     <style>
         :root {
             --bg: #0d1117;
@@ -689,11 +689,11 @@
     <header>
         <span class="logo">🤖</span>
         <div>
-            <div class="title">Computer Use Agent</div>
+            <div class="title">Browser Use Agent</div>
             <div class="subtitle">Gemini · GKE Sandbox · Playwright</div>
         </div>
         <div class="spacer"></div>
-        <div class="model-tag" id="modelTag">gemini-2.5-computer-use</div>
+        <div class="model-tag" id="modelTag">gemini-2.5-browser-use</div>
     </header>
 
     <!-- Main -->
@@ -708,7 +708,7 @@
             <div class="messages" id="messages">
                 <div class="welcome" id="welcome">
                     <div class="icon">🧠</div>
-                    <h2>Gemini Computer Use Agent</h2>
+                    <h2>Gemini Browser Use Agent</h2>
                     <p>输入任务描述，Agent 将在 GKE Sandbox 中自动打开 Chromium 完成操作，截图实时显示在右侧。</p>
                     <div class="hint">💡 Ctrl+Enter 快速提交</div>
                 </div>
@@ -728,6 +728,7 @@
                         <option value="">standard runc（无隔离）</option>
                         <option value="gvisor">gVisor（用户态内核）</option>
                         <option value="kata-qemu">Kata QEMU（轻量 VM）</option>
+                        <option value="kata-clh">Kata Cloud Hypervisor（轻量 VM，推荐）</option>
                         <option value="kata-fc">Kata Firecracker（microVM，需 devmapper）</option>
                     </select>
                 </div>
@@ -954,7 +955,7 @@
 
             const startingUrl = document.getElementById('startingUrl').value.trim() || 'https://www.google.com';
             const maxSteps = parseInt(document.getElementById('maxSteps').value) || 20;
-            const runtimeClass = document.getElementById('runtimeClass').value;  // "" | "gvisor" | "kata-qemu" | "kata-fc"
+            const runtimeClass = document.getElementById('runtimeClass').value;  // "" | "gvisor" | "kata-qemu" | "kata-clh" | "kata-fc"
 
             // Reset UI
             isRunning = true;
@@ -1104,7 +1105,7 @@
                 const res = await fetch('/health');
                 if (res.ok) {
                     const data = await res.json();
-                    const model = data.computer_use_model || '';
+                    const model = data.browser_use_model || '';
                     if (model) {
                         const short = model.replace('gemini-', '').replace('-preview', '').replace(/-\d{2}-\d{4}$/, '');
                         document.getElementById('modelTag').textContent = 'gemini-' + short;

@@ -1,5 +1,5 @@
 """
-Gemini Computer Use - Multi-Agent Architecture
+Gemini Browser Use - Multi-Agent Architecture
 GKE Sandbox (Standard Pod, In-Cluster Mode)
 
 架构：
@@ -10,7 +10,7 @@ GKE Sandbox (Standard Pod, In-Cluster Mode)
     ↓ Kubernetes API 创建 Chromium Sandbox Pod（sandbox namespace）
     ↓ 直连 Pod IP（in-cluster，无需 port-forward）
     ↓ Playwright connect_over_cdp() 连接 Sandbox
-    ↓ Gemini Computer Use API 循环（动作执行 + 截图）
+    ↓ Gemini Browser Use API 循环（动作执行 + 截图）
   GKE Sandbox Pod（chromium-sandbox，sandbox namespace）
     ↓ CDP WebSocket（直连 Pod IP）
   GCS（截图存储）
@@ -25,7 +25,7 @@ GKE Sandbox (Standard Pod, In-Cluster Mode)
   GCS_RESULTS_BUCKET      截图存储 GCS Bucket
   MAIN_AGENT_MODEL        主 Agent 模型
   SUBAGENT_MODEL          Sub-Agent 编排模型
-  COMPUTER_USE_MODEL      Computer Use 模型
+  BROWSER_USE_MODEL       Browser Use 模型
   SANDBOX_NAMESPACE       K8s 命名空间（默认 sandbox）
   SANDBOX_IMAGE           Chromium Sandbox 镜像（默认 zenika/alpine-chrome:latest）
   SANDBOX_PORT            CDP 端口（默认 9222）
@@ -79,7 +79,7 @@ GCS_BUCKET         = os.environ.get("GCS_RESULTS_BUCKET", "hxhdemo-public")
 # 模型
 MAIN_AGENT_MODEL   = os.environ.get("MAIN_AGENT_MODEL",   "gemini-3-flash-preview")
 SUBAGENT_MODEL     = os.environ.get("SUBAGENT_MODEL",     "gemini-3-flash-preview")
-COMPUTER_USE_MODEL = os.environ.get("COMPUTER_USE_MODEL", "gemini-2.5-computer-use-preview-10-2025")
+BROWSER_USE_MODEL  = os.environ.get("BROWSER_USE_MODEL", "gemini-2.5-computer-use-preview-10-2025")
 
 # GKE Sandbox
 SANDBOX_NAMESPACE     = os.environ.get("SANDBOX_NAMESPACE", "sandbox")
@@ -97,7 +97,7 @@ POD_READY_TIMEOUT = int(os.environ.get("POD_READY_TIMEOUT", "60"))
 SERVER_MODE = os.environ.get("SERVER_MODE", "false").lower() in ("1", "true", "yes")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "8080"))
 
-APP_NAME = "computer_use_multi_agent"
+APP_NAME = "browser_use_multi_agent"
 
 # ADK 使用 Vertex AI 后端
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT",      GCP_PROJECT_ID)
@@ -164,7 +164,7 @@ def create_sandbox_pod(task_id: str, runtime_class: str = "") -> str:
             },
         ),
         spec=k8s_client.V1PodSpec(
-            # RuntimeClass 可选：留空=standard runc，"gvisor"=gVisor 等
+            # RuntimeClass 可选：留空=standard runc，"gvisor"=gVisor，"kata-qemu"/"kata-clh"/"kata-fc"=Kata 等
             runtime_class_name=effective_rc if effective_rc else None,
             restart_policy="Never",
             containers=[
@@ -331,7 +331,7 @@ def upload_screenshot(screenshot: bytes, gcs_path: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Computer Use 核心循环
+# Browser Use 核心循环
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _has_function_calls(response) -> bool:
@@ -460,7 +460,7 @@ async def _execute_actions(response, page, step_index: int, screenshots_prefix: 
     return types.Content(role="user", parts=function_response_parts), step_index
 
 
-async def run_computer_use_loop(
+async def run_browser_use_loop(
     page,
     task_description: str,
     max_steps: int,
@@ -513,7 +513,7 @@ async def run_computer_use_loop(
         try:
             response = await asyncio.to_thread(
                 genai_client.models.generate_content,
-                model=COMPUTER_USE_MODEL,
+                model=BROWSER_USE_MODEL,
                 contents=contents,
                 config=config,
             )
@@ -549,29 +549,29 @@ async def run_computer_use_loop(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Computer Use 工具函数（ADK Sub-Agent 和 HTTP API 共用）
+# Browser Use 工具函数（ADK Sub-Agent 和 HTTP API 共用）
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def run_computer_use_task(
+async def run_browser_use_task(
     task_description: str,
     starting_url: str = "https://www.google.com",
     max_steps: int = 20,
     runtime_class: str = "",
 ) -> dict:
     """
-    Computer Use 核心工具：
+    Browser Use 核心工具：
     1. 在 sandbox namespace 创建 Chromium Sandbox Pod
     2. in-cluster 直连 Pod IP（无需 port-forward）
-    3. Playwright connect_over_cdp() + Gemini Computer Use API 循环
+    3. Playwright connect_over_cdp() + Gemini Browser Use API 循环
     4. 截图上传 GCS，任务完成后删除 Pod
-    runtime_class: "" | "gvisor" | "kata-qemu" | "kata-fc"，留空使用环境变量默认值
+    runtime_class: "" | "gvisor" | "kata-qemu" | "kata-clh" | "kata-fc"，留空使用环境变量默认值
     """
     task_id            = str(uuid.uuid4())
     screenshots_prefix = f"screenshots/{task_id}"
     effective_rc = runtime_class if runtime_class else SANDBOX_RUNTIME_CLASS
 
     print(f"\n{'─'*60}")
-    print(f"🚀 [ComputerUse] 任务启动")
+    print(f"🚀 [BrowserUse] 任务启动")
     print(f"   Task ID      : {task_id}")
     print(f"   描述         : {task_description}")
     print(f"   URL          : {starting_url}")
@@ -607,7 +607,7 @@ async def run_computer_use_task(
                     await _emit("log", f"🌐 导航到: {starting_url}")
                     await page.goto(starting_url, wait_until="domcontentloaded", timeout=20000)
 
-                summary, total_steps = await run_computer_use_loop(
+                summary, total_steps = await run_browser_use_loop(
                     page=page,
                     task_description=task_description,
                     max_steps=max_steps,
@@ -633,7 +633,7 @@ async def run_computer_use_task(
             "total_steps":     total_steps,
             "gcs_screenshots": gcs_screenshots,
         }
-        print(f"\n✅ [ComputerUse] 完成！步骤: {total_steps}  摘要: {(summary or '')[:120]}")
+        print(f"\n✅ [BrowserUse] 完成！步骤: {total_steps}  摘要: {(summary or '')[:120]}")
         await _emit("log", f"🎉 任务完成！共 {total_steps} 步")
         if gcs_screenshots:
             await _emit("log", f"☁️ 截图已上传: {gcs_screenshots}")
@@ -641,7 +641,7 @@ async def run_computer_use_task(
 
     except Exception as e:
         error_msg = str(e)
-        print(f"\n❌ [ComputerUse] 任务失败: {error_msg}")
+        print(f"\n❌ [BrowserUse] 任务失败: {error_msg}")
         await _emit("log", f"❌ 任务失败: {error_msg}")
         return {
             "task_id": task_id,
@@ -654,28 +654,28 @@ async def run_computer_use_task(
 # ADK Multi-Agent 定义
 # ══════════════════════════════════════════════════════════════════════════════
 
-computer_use_sub_agent = LlmAgent(
-    name="computer_use_subagent",
+browser_use_sub_agent = LlmAgent(
+    name="browser_use_subagent",
     model=SUBAGENT_MODEL,
     description=(
-        "浏览器自动化执行 Agent：在 GKE Sandbox 中运行 Gemini Computer Use，"
+        "浏览器自动化执行 Agent：在 GKE Sandbox 中运行 Gemini Browser Use，"
         "完成具体的浏览器操作任务。"
     ),
     instruction=f"""你是一个浏览器自动化执行 Agent。
 
 当收到浏览器自动化子任务时：
-1. 调用 run_computer_use_task 工具执行任务
+1. 调用 run_browser_use_task 工具执行任务
    - task_description：详细描述要完成的操作（尽量具体，包含目标和验收标准）
    - starting_url：任务起始页面
    - max_steps：根据任务复杂度估算（简单操作 5-10，复杂流程 15-25）
 2. 将工具返回的结果整理后返回（摘要、截图路径、步骤数）
 
 Sandbox 配置：
-- Computer Use 模型：{COMPUTER_USE_MODEL}
+- Browser Use 模型：{BROWSER_USE_MODEL}
 - 截图存储：gs://{GCS_BUCKET}/screenshots/
 - RuntimeClass：{SANDBOX_RUNTIME_CLASS or 'standard (runc)'}
 """,
-    tools=[run_computer_use_task],
+    tools=[run_browser_use_task],
 )
 
 root_agent = LlmAgent(
@@ -688,7 +688,7 @@ root_agent = LlmAgent(
 - 分析用户的自然语言描述，提取核心目标
 
 **2. 任务拆解**
-- 简单任务：直接委托给 computer_use_subagent
+- 简单任务：直接委托给 browser_use_subagent
 - 复杂任务：拆解为多个独立子任务，按顺序委托，最后汇总
 
 **3. 结果汇总**
@@ -697,9 +697,9 @@ root_agent = LlmAgent(
 配置：
 - Sandbox：sandbox namespace（每个子任务独立隔离的 Chromium）
 - 截图：gs://{GCS_BUCKET}/screenshots/
-- Computer Use 模型：{COMPUTER_USE_MODEL}
+- Browser Use 模型：{BROWSER_USE_MODEL}
 """,
-    sub_agents=[computer_use_sub_agent],
+    sub_agents=[browser_use_sub_agent],
 )
 
 
@@ -715,8 +715,8 @@ def build_fastapi_app():
     from pydantic import BaseModel
 
     app = FastAPI(
-        title="Computer Use Agent API",
-        description="Gemini Computer Use Multi-Agent — HTTP API",
+        title="Browser Use Agent API",
+        description="Gemini Browser Use Multi-Agent — HTTP API",
         version="1.0.0",
     )
 
@@ -729,7 +729,7 @@ def build_fastapi_app():
         task: str
         starting_url: str = "https://www.google.com"
         max_steps: int = 20
-        runtime_class: str = ""  # "" | "gvisor" | "kata-qemu" | "kata-fc"，留空使用环境变量默认值
+        runtime_class: str = ""  # "" | "gvisor" | "kata-qemu" | "kata-clh" | "kata-fc"，留空使用环境变量默认值
 
     # ── 静态文件 / Web UI ──────────────────────────────────────────────────
     static_dir = pathlib.Path(__file__).parent / "static"
@@ -751,7 +751,7 @@ def build_fastapi_app():
             "sandbox_namespace": SANDBOX_NAMESPACE,
             "sandbox_image": SANDBOX_IMAGE,
             "sandbox_runtime_class": SANDBOX_RUNTIME_CLASS or "standard (runc)",
-            "computer_use_model": COMPUTER_USE_MODEL,
+            "browser_use_model": BROWSER_USE_MODEL,
         }
 
     # ── 任务提交（异步）────────────────────────────────────────────────────
@@ -774,7 +774,7 @@ def build_fastapi_app():
 
         async def _run():
             _tasks[task_id]["status"] = "running"
-            result = await run_computer_use_task(req.task, req.starting_url, req.max_steps, runtime_class=req.runtime_class)
+            result = await run_browser_use_task(req.task, req.starting_url, req.max_steps, runtime_class=req.runtime_class)
             _tasks[task_id].update(result)
             # 推送 done 事件，SSE 消费后关闭
             await queue.put({"type": "done", "data": result})
@@ -791,7 +791,7 @@ def build_fastapi_app():
     @app.post("/task/sync")
     async def submit_task_sync(req: TaskRequest):
         """提交任务（同步，等待完成后返回结果）"""
-        return await run_computer_use_task(req.task, req.starting_url, req.max_steps, runtime_class=req.runtime_class)
+        return await run_browser_use_task(req.task, req.starting_url, req.max_steps, runtime_class=req.runtime_class)
 
     # ── SSE：实时事件流 ─────────────────────────────────────────────────────
     @app.get("/task/{task_id}/events")
@@ -855,10 +855,10 @@ def build_fastapi_app():
 
 async def run_cli():
     print("=" * 65)
-    print("🤖 Gemini Computer Use - Multi-Agent + GKE Sandbox")
+    print("🤖 Gemini Browser Use - Multi-Agent + GKE Sandbox")
     print(f"   Main Agent    : {MAIN_AGENT_MODEL}")
     print(f"   Sub-Agent     : {SUBAGENT_MODEL}")
-    print(f"   Computer Use  : {COMPUTER_USE_MODEL}")
+    print(f"   Browser Use   : {BROWSER_USE_MODEL}")
     print(f"   Sandbox NS    : {SANDBOX_NAMESPACE}")
     print(f"   Sandbox Image : {SANDBOX_IMAGE}")
     print(f"   RuntimeClass  : {SANDBOX_RUNTIME_CLASS or 'standard (runc)'}")
@@ -916,7 +916,7 @@ if __name__ == "__main__":
     if SERVER_MODE:
         import uvicorn
         print("=" * 65)
-        print("🌐 Computer Use Agent — HTTP Server Mode")
+        print("🌐 Browser Use Agent — HTTP Server Mode")
         print(f"   Port          : {SERVER_PORT}")
         print(f"   Sandbox NS    : {SANDBOX_NAMESPACE}")
         print(f"   Sandbox Image : {SANDBOX_IMAGE}")

@@ -1,5 +1,5 @@
 """
-Gemini Computer Use Agent - 使用指南
+Gemini Browser Use Agent - 使用指南
 
 1. 环境准备:
    - 确保安装了 google-genai 和 playwright: pip install -U google-genai playwright
@@ -32,7 +32,7 @@ from playwright.sync_api import sync_playwright
 # GCP 项目配置（从环境变量读取，支持自定义）
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "hxhdemo")
 LOCATION = os.environ.get("VERTEX_LOCATION", "global")
-MODEL_ID = os.environ.get("COMPUTER_USE_MODEL", "gemini-2.5-computer-use-preview-10-2025")
+MODEL_ID = os.environ.get("BROWSER_USE_MODEL", "gemini-2.5-computer-use-preview-10-2025")
 
 def has_function_calls(response):
     """检查模型响应中是否包含函数调用"""
@@ -53,7 +53,7 @@ def has_function_calls_in_history(contents):
     return any(hasattr(part, 'function_call') and part.function_call for part in last_content.parts)
 
 def execute_and_create_feedback(response, page):
-    """解析内置 computer_use 指令，执行并按照官方要求构建包含截图的 FunctionResponse"""
+    """解析内置 browser_use 指令，执行并按照官方要求构建包含截图的 FunctionResponse"""
     function_response_parts = []
     candidate = response.candidates[0]
     
@@ -144,7 +144,7 @@ def execute_and_create_feedback(response, page):
             print(f"  [⚠️ 截图失败]: {e}")
             screenshot = b""
 
-        # 按照官方 Computer Use 模型的特殊要求构建带有截图的 FunctionResponse
+        # 按照官方 Browser Use 模型的特殊要求构建带有截图的 FunctionResponse
         response_part = types.FunctionResponse(
             name=name,
             response={"url": current_url},
@@ -228,7 +228,7 @@ def main():
                 chrome_proc.kill()
             return
 
-        # 使用官方内置 Computer Use Tool 配置
+        # 使用官方内置 Browser Use Tool 配置
         generate_content_config = types.GenerateContentConfig(
             temperature=0.0,
             system_instruction="你是一个浏览器自动化助手。请使用提供的工具操作浏览器，完成任务后提供最终结果。",
@@ -242,7 +242,7 @@ def main():
         )
 
         contents = []
-        print("\n🤖 Gemini Computer Use Agent 已就绪 (输入 'exit' 退出)\n")
+        print("\n🤖 Gemini Browser Use Agent 已就绪 (输入 'exit' 退出)\n")
 
         while True:
             if len(contents) == 0 or not has_function_calls_in_history(contents):
@@ -284,7 +284,7 @@ def main():
                 print(f"\n✅ Gemini:\n{response.text or '[任务完成]'}")
                 continue
 
-            # 执行动作并直接生成带有截图的符合 Computer Use 规范的 feedback
+            # 执行动作并直接生成带有截图的符合 Browser Use 规范的 feedback
             feedback_content = execute_and_create_feedback(response, page)
             contents.append(feedback_content)
 

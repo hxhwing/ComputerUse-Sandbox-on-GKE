@@ -26,26 +26,26 @@ subjects:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: computer-use-agent
+  name: browser-use-agent
   namespace: sandbox
   labels:
-    app: computer-use-agent
+    app: browser-use-agent
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: computer-use-agent
+      app: browser-use-agent
   template:
     metadata:
       labels:
-        app: computer-use-agent
+        app: browser-use-agent
     spec:
       # standard runc（无 runtimeClassName）→ 支持 kubectl port-forward
       # 使用 GKE node 默认 service account（已有 K8s API 权限）
       containers:
         - name: agent
           # ⚠️ 替换为你的 Artifact Registry 镜像路径
-          image: us-central1-docker.pkg.dev/<YOUR_PROJECT_ID>/<YOUR_REPO>/computer-use-agent:latest
+          image: <YOUR_REGION>-docker.pkg.dev/<YOUR_PROJECT_ID>/<YOUR_REPO>/browser-use-agent:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
